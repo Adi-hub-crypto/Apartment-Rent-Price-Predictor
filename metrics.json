@@ -1,0 +1,69 @@
+{
+  "method": "ols",
+  "method_label": "Multiple linear regression - OLS (normal equations)",
+  "n_train": 7000,
+  "n_features": 49,
+  "mae": 776.3978168753354,
+  "mae_std": 34.92462179900058,
+  "median_ae": 539.6279260766617,
+  "points": 0.4824014554164431,
+  "baseline_median_mae": 1391.0247900000002,
+  "comparison": {},
+  "mae_by_district": {
+    "business": 812.587136926385,
+    "central": 1068.7193780668244,
+    "green_zone": 632.5193762769603,
+    "industrial": 491.96033845845943,
+    "luxury_hills": 2767.3691880248284,
+    "old_town": 773.0317017476129,
+    "residential": 569.6831085901808,
+    "riverside": 714.486837389404,
+    "suburb": 647.8919820243451,
+    "university": 651.8123045595728
+  },
+  "district_rows": {
+    "business": 768,
+    "central": 690,
+    "green_zone": 511,
+    "industrial": 595,
+    "luxury_hills": 270,
+    "old_town": 528,
+    "residential": 1241,
+    "riverside": 583,
+    "suburb": 993,
+    "university": 821
+  },
+  "district_median_rent": {
+    "business": 3547.925,
+    "central": 4078.8999999999996,
+    "green_zone": 2481.14,
+    "industrial": 1395.22,
+    "luxury_hills": 12951.07,
+    "old_town": 2931.0,
+    "residential": 2095.13,
+    "riverside": 2869.95,
+    "suburb": 2051.86,
+    "university": 2553.45
+  },
+  "calibration": {
+    "business": 1.004,
+    "central": 1.024,
+    "green_zone": 1.023,
+    "industrial": 1.084,
+    "luxury_hills": 0.964,
+    "old_town": 1.02,
+    "residential": 1.041,
+    "riverside": 1.001,
+    "suburb": 1.033,
+    "university": 1.013
+  },
+  "reference": {
+    "area": 66.4,
+    "district": "residential",
+    "floor": 8,
+    "distance_to_center": 5.865
+  },
+  "loss_history": [
+    0.13331456100442793
+  ]
+}

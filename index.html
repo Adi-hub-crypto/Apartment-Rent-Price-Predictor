@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en" data-theme="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rent Estimator</title>
+<style>
+/* ── tokens ──────────────────────────────────────────────────────────────
+   The breakdown chart encodes polarity - a factor raises or lowers the rent
+   either side of 1.0x - so it uses the documented diverging pair (blue vs
+   red, warm/cool, neutral grey midpoint).  Every other chart shows magnitude
+   and therefore uses a single hue, light to dark.                        */
+:root {
+  color-scheme: light;
+  --paper: #e6e9ea;
+  --card:  #fbfcfc;
+  --sunk:  #eff2f3;
+  --ink:   #10161a;
+  --ink-2: #47525a;
+  --ink-3: #7b868d;
+  --rule:  #ccd3d6;
+  --grid:  #dfe4e6;
+
+  --up:      #2a78d6;
+  --down:    #e34948;
+  --neutral: #c7ccc9;
+
+  --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec;
+  --seq-4: #2a78d6; --seq-5: #1c5cab; --seq-6: #104281;
+
+  --display: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", sans-serif;
+  --body: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Menlo", "SF Mono", "DejaVu Sans Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #101314; --card: #1a1d1e; --sunk: #232728;
+    --ink: #ffffff; --ink-2: #c0c6c8; --ink-3: #8b9295;
+    --rule: #313638; --grid: #171b1c;
+    --up: #3987e5; --down: #e66767; --neutral: #4d5250;
+    --seq-1: #10243f; --seq-2: #0d366b; --seq-3: #184f95;
+    --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #86b6ef;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #101314; --card: #1a1d1e; --sunk: #232728;
+  --ink: #ffffff; --ink-2: #c0c6c8; --ink-3: #8b9295;
+  --rule: #313638; --grid: #171b1c;
+  --up: #3987e5; --down: #e66767; --neutral: #4d5250;
+  --seq-1: #10243f; --seq-2: #0d366b; --seq-3: #184f95;
+  --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #86b6ef;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; color: var(--ink); font: 15px/1.55 var(--body);
+  background:
+    repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 48px),
+    repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 48px),
+    var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--up); outline-offset: 2px; }
+
+/* ── header ─────────────────────────────────────────────────────────── */
+header {
+  background: var(--card); border-bottom: 1px solid var(--rule);
+  padding: 16px 26px 0;
+}
+.head-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+h1 {
+  font: 500 22px/1 var(--display); letter-spacing: .2em; text-transform: uppercase;
+  margin: 0;
+}
+.sub { color: var(--ink-3); font: 12px/1 var(--mono); }
+.spacer { flex: 1; }
+.theme-btn {
+  background: none; border: 1px solid var(--rule); color: var(--ink-2);
+  font: 11px/1 var(--display); letter-spacing: .14em; text-transform: uppercase;
+  padding: 8px 12px; cursor: pointer; border-radius: 2px;
+}
+.tabs { display: flex; gap: 2px; margin-top: 14px; }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+  font: 12px/1 var(--display); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-3); padding: 10px 16px 12px;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--up); }
+
+main { max-width: 1150px; margin: 0 auto; padding: 22px 26px 60px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+.card {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 3px;
+  padding: 19px;
+}
+.card + .card, .grid + .card, .card + .grid { margin-top: 16px; }
+.eyebrow {
+  font: 11px/1 var(--display); letter-spacing: .18em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 15px;
+}
+
+/* ── the form ───────────────────────────────────────────────────────── */
+.field { margin-bottom: 17px; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+.field label { font-size: 13px; color: var(--ink-2); }
+.field output { font: 13px/1 var(--mono); color: var(--ink); }
+input[type="range"] { width: 100%; accent-color: var(--up); margin: 0; }
+select, input[type="number"] {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--rule); border-radius: 2px;
+  background: var(--sunk); color: var(--ink); font: 14px/1.2 var(--body);
+}
+.btn {
+  font: 12px/1 var(--display); letter-spacing: .1em; text-transform: uppercase;
+  padding: 10px 15px; border-radius: 2px; cursor: pointer;
+  background: var(--card); color: var(--ink); border: 1px solid var(--rule);
+}
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); padding: 12px 22px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip {
+  font: 11px/1 var(--mono); color: var(--ink-2); background: var(--sunk);
+  border: 1px solid var(--rule); border-radius: 999px; padding: 6px 11px;
+}
+.hint { color: var(--ink-3); font-size: 13px; margin: 11px 0 0; }
+.note {
+  margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--down);
+  background: var(--sunk); font-size: 13px; color: var(--ink-2);
+}
+
+/* ── the estimate ───────────────────────────────────────────────────── */
+.price-card { display: flex; flex-direction: column; justify-content: center; min-height: 190px; }
+.price {
+  font: 500 clamp(38px, 7vw, 62px)/1 var(--display); letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+.price small { font-size: 20px; color: var(--ink-3); letter-spacing: .06em; margin-left: 7px; }
+.price-sub { color: var(--ink-2); font-size: 13px; margin-top: 12px; }
+.band { color: var(--ink-3); font: 12px/1.5 var(--mono); margin-top: 5px; }
+
+/* ── signature: the multiplier breakdown ────────────────────────────── */
+.steps { display: grid; gap: 3px; margin-top: 4px; }
+.step { display: grid; grid-template-columns: 122px 1fr 96px; align-items: center; gap: 12px; }
+.step .name { font-size: 13px; color: var(--ink-2); }
+.step .name em { display: block; font-style: normal; font: 11px/1.4 var(--mono); color: var(--ink-3); }
+.axis-wrap { position: relative; height: 30px; }
+.axis-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--rule); }
+.step-bar { position: absolute; top: 7px; height: 15px; border-radius: 2px; }
+.step .amount { font: 13px/1 var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.rule-row { display: grid; grid-template-columns: 122px 1fr 96px; gap: 12px; align-items: center;
+            border-top: 1px solid var(--rule); margin-top: 9px; padding-top: 9px; }
+.rule-row .name { font: 12px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.rule-row .amount { font: 14px/1 var(--mono); text-align: right; }
+.scale-marks { display: grid; grid-template-columns: 122px 1fr 96px; gap: 12px; margin-top: 4px; }
+.scale-inner { position: relative; height: 15px; font: 10px/1 var(--mono); color: var(--ink-3); }
+.scale-inner span { position: absolute; transform: translateX(-50%); }
+
+/* ── dropzone / table ───────────────────────────────────────────────── */
+.dropzone {
+  border: 2px dashed var(--rule); border-radius: 3px; background: var(--sunk);
+  padding: 24px 18px; text-align: center;
+}
+.dropzone.over { border-color: var(--up); background: var(--card); }
+.drop-main { margin: 0 0 11px; color: var(--ink-2); }
+.drop-sub { margin: 0; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 13px; }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--rule); }
+th { font: 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.scroll { overflow-x: auto; }
+
+/* ── model tab ──────────────────────────────────────────────────────── */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 13px; }
+.tile { background: var(--sunk); border: 1px solid var(--rule); border-radius: 2px; padding: 14px 15px; }
+.tile .k { font-size: 12px; color: var(--ink-3); }
+.tile .v { font: 500 28px/1 var(--display); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.tile .u { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.hbars { display: grid; gap: 11px; }
+.hbar { display: grid; grid-template-columns: 132px 1fr 74px; align-items: center; gap: 11px; }
+.hbar .n { font-size: 13px; color: var(--ink-2); }
+.hbar .t { display: block; height: 14px; background: var(--sunk); border-radius: 2px; }
+.hbar .f { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--seq-3); }
+.hbar .f.active { background: var(--seq-4); }
+.hbar .f.baseline { background: var(--neutral); }
+.hbar .v { font: 12px/1 var(--mono); text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+#tooltip {
+  position: fixed; z-index: 40; pointer-events: none; opacity: 0;
+  background: var(--ink); color: var(--card); font-size: 12px;
+  padding: 7px 10px; border-radius: 3px; transition: opacity .12s; max-width: 260px;
+}
+#tooltip.on { opacity: 1; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-row">
+    <h1>Rent Estimator</h1>
+    <span class="sub" id="headSub">10 districts · linear model on log price</span>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button">Dark</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-estimate" aria-selected="true" aria-controls="panel-estimate">Estimate</button>
+    <button class="tab" role="tab" id="tab-model" aria-selected="false" aria-controls="panel-model">Model</button>
+  </nav>
+</header>
+
+<main>
+  <section class="panel" id="panel-estimate" role="tabpanel" aria-labelledby="tab-estimate">
+    <div class="grid">
+      <div class="card">
+        <p class="eyebrow">Apartment</p>
+
+        <div class="field">
+          <div class="field-head"><label for="area">Area</label><output id="areaOut">66 m²</output></div>
+          <input type="range" id="area" min="18" max="260" step="0.1" value="95">
+        </div>
+
+        <div class="field">
+          <label for="district">District</label>
+          <select id="district"></select>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="floor">Floor</label><output id="floorOut">8</output></div>
+          <input type="range" id="floor" min="1" max="40" step="1" value="5">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="distance">Distance to centre</label><output id="distanceOut">5.9 km</output></div>
+          <input type="range" id="distance" min="0.2" max="21.5" step="0.1" value="2.5">
+        </div>
+
+        <div class="toolbar">
+          <button class="btn" id="resetBtn" type="button">Reset to typical</button>
+          <span class="chip" id="statusChip">loading…</span>
+        </div>
+        <div class="note" id="note" hidden></div>
+      </div>
+
+      <div class="card price-card">
+        <p class="eyebrow">Estimated rent</p>
+        <div class="price" id="price">—<small>per month</small></div>
+        <p class="price-sub" id="priceSub">Adjust the apartment on the left.</p>
+        <p class="band" id="band"></p>
+      </div>
+    </div>
+
+    <div class="card" id="breakdownCard" hidden>
+      <p class="eyebrow">How that price is built</p>
+      <div class="steps" id="steps"></div>
+      <div class="scale-marks">
+        <span></span><div class="scale-inner" id="scaleMarks"></div><span></span>
+      </div>
+      <p class="hint" id="breakdownHint"></p>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Submission — price a whole test set</p>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a test CSV">
+        <p class="drop-main">Drop <b>test.csv</b> here</p>
+        <p class="drop-sub"><button class="btn" id="csvBtn" type="button">Choose file</button></p>
+      </div>
+      <p class="hint">Needs <code>area</code>, <code>district</code>, <code>floor</code> and
+        <code>distance_to_center</code>. Every row is priced and written back as
+        <code>id,rent_price</code> — the sample_submission layout.</p>
+      <div id="batchResult"></div>
+      <div class="toolbar" id="downloadRow" hidden style="margin-top:13px">
+        <button class="btn primary" id="downloadBtn" type="button">Download submission.csv</button>
+        <span class="chip" id="csvChip"></span>
+      </div>
+      <input type="file" id="csvInput" accept=".csv,text/csv" hidden>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-model" role="tabpanel" aria-labelledby="tab-model" hidden>
+    <div class="card">
+      <p class="eyebrow">Scores</p>
+      <div class="tiles" id="tiles"></div>
+      <p class="hint" id="scoreHint"></p>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Estimators — 5-fold cross-validated MAE, lower is better</p>
+      <div class="hbars" id="methodBars"></div>
+      <p class="hint">Bars run from 0 to the do-nothing baseline, so shorter is better. All three use the same features and the same log target; the active one is highlighted.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <p class="eyebrow">Error by district</p>
+        <div class="hbars" id="districtError"></div>
+        <p class="hint">Mean absolute error on out-of-fold predictions.</p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Median rent by district</p>
+        <div class="hbars" id="districtRent"></div>
+        <p class="hint">From the training data — the price level each district sets.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Retrain</p>
+      <div class="toolbar" id="methodPicker"></div>
+      <p class="hint">Refits on all 7,000 rows and replaces model.pkl.</p>
+      <div class="note" id="trainNote" hidden></div>
+    </div>
+  </section>
+</main>
+
+<div id="tooltip" role="status"></div>
+<p class="sr" id="live" aria-live="polite"></p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let STATE = null, TIMER = null;
+
+const money = (v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+const api = async (path, body) => {
+  let res;
+  try {
+    res = await fetch(path, body ? {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    } : undefined);
+  } catch (err) {
+    // fetch only rejects when the request never reached a server
+    throw new Error("Can't reach the local server. Check that "
+      + "`python3 web_app.py` is still running in your terminal, then reload.");
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    throw new Error(`The server replied with ${res.status} and no JSON. `
+      + "Check the terminal running web_app.py for an error.");
+  }
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+};
+
+const say = (msg) => { $("note").hidden = !msg; $("note").textContent = msg || ""; };
+
+for (const name of ["estimate", "model"]) {
+  $("tab-" + name).addEventListener("click", () => {
+    for (const other of ["estimate", "model"]) {
+      const on = other === name;
+      $("tab-" + other).setAttribute("aria-selected", String(on));
+      $("panel-" + other).hidden = !on;
+    }
+  });
+}
+
+const prefersDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
+const applyTheme = (theme) => {
+  document.documentElement.dataset.theme = theme;
+  const dark = theme === "dark" || (theme === "" && prefersDark());
+  $("themeBtn").textContent = dark ? "Light" : "Dark";
+  try { localStorage.setItem("theme", theme); } catch (e) {}
+};
+$("themeBtn").addEventListener("click", () => {
+  const t = document.documentElement.dataset.theme;
+  applyTheme((t === "dark" || (t === "" && prefersDark())) ? "light" : "dark");
+});
+try { applyTheme(localStorage.getItem("theme") ?? ""); } catch (e) { applyTheme(""); }
+
+const tip = $("tooltip");
+const bindTip = (el, html) => {
+  el.addEventListener("mousemove", (ev) => {
+    tip.innerHTML = html; tip.classList.add("on");
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 270) + "px";
+    tip.style.top = (ev.clientY + 16) + "px";
+  });
+  el.addEventListener("mouseleave", () => tip.classList.remove("on"));
+};
+
+/* ── the estimate ───────────────────────────────────────────────────── */
+const readForm = () => ({
+  area: parseFloat($("area").value),
+  district: $("district").value,
+  floor: parseInt($("floor").value, 10),
+  distance: parseFloat($("distance").value),
+});
+
+const syncOutputs = () => {
+  const f = readForm();
+  $("areaOut").textContent = f.area.toFixed(0) + " m²";
+  $("floorOut").textContent = f.floor;
+  $("distanceOut").textContent = f.distance.toFixed(1) + " km";
+};
+
+/* The breakdown is a diverging chart: every step either raises or lowers the
+   rent, so it is drawn either side of a neutral 1.0x line. */
+const renderSteps = (result) => {
+  const mults = result.steps.map((s) => s.multiplier);
+  const span = Math.max(1.35, ...mults.map((m) => Math.max(m, 1 / m)));
+  const toX = (m) => 50 + 50 * (Math.log(m) / Math.log(span));
+
+  $("steps").innerHTML = result.steps.map((s) => {
+    const up = s.multiplier >= 1;
+    const a = toX(1), b = toX(s.multiplier);
+    const left = Math.min(a, b), width = Math.max(Math.abs(b - a), 0.6);
+    return `<div class="step">
+      <span class="name">${s.label}<em>${String(s.from) === String(s.to)
+        ? "unchanged" : s.from + " → " + s.to}</em></span>
+      <span class="axis-wrap">
+        <i class="axis-line" style="left:50%"></i>
+        <i class="step-bar" style="left:${left}%;width:${width}%;
+           background:${up ? "var(--up)" : "var(--down)"};
+           border-radius:${up ? "0 2px 2px 0" : "2px 0 0 2px"}"></i>
+      </span>
+      <span class="amount">×${s.multiplier.toFixed(3)}</span>
+    </div>`;
+  }).join("") + `
+    <div class="rule-row">
+      <span class="name">Estimate</span><span></span>
+      <span class="amount">${money(result.price)}</span>
+    </div>`;
+
+  $("scaleMarks").innerHTML = [1 / span, 1, span]
+    .map((m) => `<span style="left:${toX(m)}%">×${m.toFixed(2)}</span>`).join("");
+
+  [...$("steps").querySelectorAll(".step")].forEach((row, i) => {
+    const s = result.steps[i];
+    const pct = Math.abs(s.multiplier - 1) * 100;
+    bindTip(row, `<b>${s.label}</b>: ${s.from} → ${s.to}<br>` +
+      `${s.multiplier >= 1 ? "raises" : "lowers"} the rent by ${pct.toFixed(1)}%` +
+      `<br>running total ${money(s.price)}`);
+  });
+
+  const r = result.reference;
+  $("breakdownHint").textContent =
+    `Starts from a typical apartment (${r.area} m², ${r.district}, floor ${r.floor}, ` +
+    `${r.distance_to_center} km out) at ${money(result.base)}, then applies each ` +
+    `difference in turn. The model is linear in log price, so these multipliers are ` +
+    `exact and multiply out to the estimate; how the total splits between steps ` +
+    `depends on their order, the total does not.`;
+  $("breakdownCard").hidden = false;
+};
+
+const estimate = async () => {
+  syncOutputs();
+  try {
+    const result = await api("/api/estimate", readForm());
+    $("price").innerHTML = money(result.price) + "<small>per month</small>";
+    $("priceSub").textContent =
+      `${readForm().area.toFixed(0)} m² in ${result.district_label}, floor ` +
+      `${readForm().floor}, ${readForm().distance.toFixed(1)} km from the centre.`;
+    const mae = STATE?.metrics?.mae;
+    $("band").textContent = mae
+      ? `Typical error ±${money(mae)} — a listing this model prices at ` +
+        `${money(result.price)} usually rents between ${money(Math.max(0, result.price - mae))} ` +
+        `and ${money(result.price + mae)}.`
+      : "";
+    renderSteps(result);
+    say("");
+    $("live").textContent = `Estimated ${money(result.price)} per month.`;
+  } catch (err) { say(err.message); }
+};
+
+const debounced = () => { syncOutputs(); clearTimeout(TIMER); TIMER = setTimeout(estimate, 160); };
+for (const id of ["area", "floor", "distance"]) $(id).addEventListener("input", debounced);
+$("district").addEventListener("change", estimate);
+$("resetBtn").addEventListener("click", () => {
+  const r = STATE.reference;
+  if (!r) return;
+  $("area").value = r.area; $("floor").value = r.floor;
+  $("distance").value = r.distance_to_center; $("district").value = r.district;
+  estimate();
+});
+
+/* ── batch ──────────────────────────────────────────────────────────── */
+const runBatch = async (csv, label) => {
+  $("batchResult").innerHTML = `<p class="hint">Pricing ${label}…</p>`;
+  try {
+    const out = await api("/api/batch", { csv });
+    const c = out.check;
+    $("downloadRow").hidden = false;
+    $("csvChip").textContent = c.matches_sample === true
+      ? `${out.rows} rows · ${c.columns.join(",")} · matches sample_submission.csv`
+      : `${out.rows} rows · ${c.columns.join(",")}`;
+    $("batchResult").innerHTML = `
+      <table><thead><tr><th>id</th><th>area</th><th>district</th><th>floor</th>
+        <th>km</th><th>rent</th></tr></thead><tbody>
+      ${out.preview.map((r) => `<tr>
+        <td class="num">${r.id}</td><td class="num">${r.area}</td>
+        <td>${r.district}</td><td class="num">${r.floor}</td>
+        <td class="num">${r.distance}</td>
+        <td class="num"><b>${money(r.price)}</b></td></tr>`).join("")}
+      </tbody></table>
+      <p class="hint">First ${out.preview.length} of ${out.rows} rows.
+        Predicted rent: ${money(out.summary.min)} – ${money(out.summary.max)},
+        median ${money(out.summary.median)}.</p>`;
+    if (c.unknown_districts?.length) {
+      $("batchResult").insertAdjacentHTML("afterbegin",
+        `<div class="note">Unrecognised district(s): ${c.unknown_districts.join(", ")}.
+         Those rows were priced as the reference district, so their estimates are weak.</div>`);
+    }
+    if (c.matches_sample === false) {
+      $("batchResult").insertAdjacentHTML("afterbegin",
+        `<div class="note">Priced ${out.rows} rows, but the ids differ from
+         data/sample_submission.csv (${c.sample_rows} rows). Expected for any file
+         other than the official test set.</div>`);
+    }
+  } catch (err) {
+    $("downloadRow").hidden = true;
+    $("batchResult").innerHTML = `<div class="note">${err.message}</div>`;
+  }
+};
+$("csvBtn").addEventListener("click", () => $("csvInput").click());
+$("csvInput").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0];
+  if (file) runBatch(await file.text(), file.name);
+});
+const dz = $("dropzone");
+for (const t of ["dragenter", "dragover"])
+  dz.addEventListener(t, (ev) => { ev.preventDefault(); dz.classList.add("over"); });
+for (const t of ["dragleave", "drop"]) dz.addEventListener(t, () => dz.classList.remove("over"));
+dz.addEventListener("drop", async (ev) => {
+  ev.preventDefault();
+  const file = ev.dataTransfer.files[0];
+  if (file) runBatch(await file.text(), file.name);
+});
+dz.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); $("csvInput").click(); }
+});
+$("downloadBtn").addEventListener("click", () => { location.href = "/api/submission"; });
+
+/* ── model tab ──────────────────────────────────────────────────────── */
+const bars = (node, rows, opts) => {
+  // an explicit max keeps a small spread from filling the track and reading
+  // as a large difference
+  const max = opts.max ?? Math.max(...rows.map((r) => r.value));
+  node.innerHTML = rows.map((r) => `
+    <div class="hbar">
+      <span class="n">${r.label}</span>
+      <span class="t"><span class="f ${r.active ? "active" : ""}${r.baseline ? " baseline" : ""}"
+        style="width:${(r.value / max * 100).toFixed(1)}%"></span></span>
+      <span class="v">${r.text}</span>
+    </div>`).join("");
+  [...node.children].forEach((row, i) => bindTip(row, opts.tip(rows[i])));
+};
+
+const renderModel = () => {
+  const m = STATE.metrics;
+  if (!m) {
+    $("tiles").innerHTML = `<p class="hint">Run <code>python3 train.py</code> once to generate metrics.</p>`;
+    return;
+  }
+  $("tiles").innerHTML = [
+    ["MAE", money(m.mae), "5-fold cross-validated"],
+    ["Competition points", m.points.toFixed(3), "1 − MAE/1500"],
+    ["Median error", money(m.median_ae), "half the rows are closer"],
+    ["Rows", m.n_train.toLocaleString(), `${m.n_features} features`],
+  ].map(([k, v, u]) => `<div class="tile"><div class="k">${k}</div>
+      <div class="v">${v}</div><div class="u">${u}</div></div>`).join("");
+  $("scoreHint").textContent =
+    `Always predicting the training median scores ${money(m.baseline_median_mae)} — ` +
+    `above the 1,500 cut-off, so it earns nothing. This model is ` +
+    `${money(m.baseline_median_mae - m.mae)} better than that.`;
+
+  const methodRows = Object.entries(m.comparison).map(([k, v]) => ({
+    label: v.label.replace(" - ", " — "), value: v.mae, text: money(v.mae),
+    active: k === m.method, std: v.std }));
+  methodRows.push({ label: "Always predict the median", value: m.baseline_median_mae,
+                    text: money(m.baseline_median_mae), baseline: true });
+  bars($("methodBars"), methodRows, {
+    max: m.baseline_median_mae,
+    tip: (r) => r.baseline
+      ? `<b>${r.label}</b><br>the do-nothing baseline — MAE ${r.value.toFixed(2)}`
+      : `<b>${r.label}</b><br>MAE ${r.value.toFixed(2)} ± ${r.std.toFixed(2)}` });
+
+  const errs = Object.entries(m.mae_by_district)
+    .sort((a, b) => a[1] - b[1])
+    .map(([k, v]) => ({ label: k, value: v, text: money(v), rows: m.district_rows[k] }));
+  bars($("districtError"), errs,
+    { tip: (r) => `<b>${r.label}</b><br>MAE ${money(r.value)} over ${r.rows} rows` });
+
+  const rents = Object.entries(m.district_median_rent)
+    .sort((a, b) => a[1] - b[1])
+    .map(([k, v]) => ({ label: k, value: v, text: money(v), rows: m.district_rows[k] }));
+  bars($("districtRent"), rents,
+    { tip: (r) => `<b>${r.label}</b><br>median rent ${money(r.value)} · ${r.rows} rows` });
+
+  $("methodPicker").innerHTML = Object.entries(STATE.methods).map(([k, label]) =>
+    `<button class="btn ${k === m.method ? "primary" : ""}" data-method="${k}">${
+      k === "ols" ? "OLS" : k === "gd" ? "Gradient descent" : "Gradient boosting"}</button>`).join("")
+    + `<span class="chip">now: ${m.method_label}</span>`;
+  for (const btn of $("methodPicker").querySelectorAll("[data-method]")) {
+    btn.addEventListener("click", async () => {
+      const note = $("trainNote");
+      note.hidden = false; note.textContent = "Training…";
+      for (const b of $("methodPicker").querySelectorAll("button")) b.disabled = true;
+      try {
+        const out = await api("/api/train", { method: btn.dataset.method });
+        note.textContent = `Trained ${out.label} on ${out.n_train} rows ` +
+          `(${out.n_features} features) and saved model.pkl. The scores on this tab ` +
+          `still describe the model train.py measured.`;
+        STATE = await api("/api/state");
+        estimate();
+      } catch (err) { note.textContent = err.message; }
+      finally { for (const b of $("methodPicker").querySelectorAll("button")) b.disabled = false; }
+    });
+  }
+};
+
+/* ── boot ───────────────────────────────────────────────────────────── */
+(async () => {
+  STATE = await api("/api/state");
+  $("district").innerHTML = STATE.districts
+    .map((d) => `<option value="${d.key}">${d.label}</option>`).join("");
+  $("district").value = "central";   // the markup opens on a worked example;
+                                     // "Reset to typical" returns to the reference
+  $("statusChip").textContent = STATE.ready ? "model ready" : "no model — train one";
+  if (STATE.metrics) {
+    $("headSub").textContent =
+      `10 districts · MAE ${money(STATE.metrics.mae)} · ${STATE.metrics.n_features} features`;
+  }
+  renderModel();
+  if (STATE.ready) estimate();
+  else say("No model found. Open the Model tab and train one.");
+})();
+</script>
+</body>
+</html>
